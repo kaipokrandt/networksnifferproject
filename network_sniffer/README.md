@@ -11,18 +11,23 @@ Manual setup :
 
 # Clone the repo
 git clone https://github.com/kaipokrandt/networksnifferproject.git
+
 cd network-sniffer
 
 # (Optional) Create a virtual environment
 python3 -m venv venv
+
 source venv/bin/activate  # macOS/Linux
+
 venv\Scripts\activate     # Windows
 
 # Install dependencies
 pip install --upgrade pip
+
 pip install -r requirements.txt
 
 sudo python3 network_sniffer.py # macOS/Linux
+
 python network_sniffer.py       # Windows
 
 
