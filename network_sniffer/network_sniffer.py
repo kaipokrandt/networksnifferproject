@@ -4,8 +4,10 @@
 from scapy.all import sniff
 from scapy.layers.inet import IP, TCP, UDP, ICMP
 
+# map protocol numbers to names
+PROTO_MAP = {1: "ICMP", 6: "TCP", 17: "UDP"}
 
-def packet_callback(packet):
+def packet_callback(packet, selected_protocols):
     if IP in packet:
         ip_src = packet[IP].src
         ip_dst = packet[IP].dst
@@ -13,11 +15,24 @@ def packet_callback(packet):
         length = len(packet)
         
         proto_name = {1: "ICMP", 6: "TCP", 17: "UDP"}.get(proto, str(proto))
-        print(f"IP {ip_src} -> {ip_dst} | Protocol: {proto_name} | Length: {length}")
+        if "all" in selected_protocols or proto_name.lower() in selected_protocols:
+            print(f"IP {ip_src} -> {ip_dst} | Protocol: {proto_name} | Length: {length}")
         
 def main():
     print("Starting packet sniffer... Ctrl+C to stop.")
-    sniff(prn=packet_callback, store=False, filter="tcp, udp, icmp, or all")
+    
+    # ask user for protocols to monitor
+    user_input = input("Enter protocols to monitor (tcp, udp, icmp, all): ").lower()
+    selected_protocols = [p.strip() for p in user_input.split(",")]
+    
+    # BPF filter for scapy sniff
+    bpf_filter = ""
+    if "all" not in selected_protocols:
+        bpf_filter = " or ".join(selected_protocols)
+        
+    sniff(prn=lambda pkt: packet_callback(pkt, selected_protocols),
+          store=False,
+          filter=bpf_filter)
 
 if __name__ == "__main__":
     main()
