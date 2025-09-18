@@ -3,24 +3,44 @@
 
 from scapy.all import sniff
 from scapy.layers.inet import IP, TCP, UDP, ICMP
+import matplotlib.pyplot as plt
+from collections import defaultdict
+import threading
+import signal
+
+# globals
+protocol_counts = defaultdict(int)
+top_talkers = defaultdict(int)
+lock = threading.Lock()
+running = True
 
 # map protocol numbers to names
-PROTO_MAP = {1: "ICMP", 6: "TCP", 17: "UDP"}
+PROTO_MAP = {1: "ICMP", 2: "IGMP", 6: "TCP", 17: "UDP"}
 
+# callback function for each captured packet
 def packet_callback(packet, selected_protocols):
     if IP in packet:
-        ip_src = packet[IP].src
-        ip_dst = packet[IP].dst
         proto = packet[IP].proto
-        length = len(packet)
+        proto_name = PROTO_MAP.get(proto, f"OTHER({proto})")
+        ip_src = packet[IP].src
         
-        proto_name = {1: "ICMP", 6: "TCP", 17: "UDP"}.get(proto, str(proto))
-        if "all" in selected_protocols or proto_name.lower() in selected_protocols:
-            print(f"IP {ip_src} -> {ip_dst} | Protocol: {proto_name} | Length: {length}")
-        
+        with lock:
+            if "all" in selected_protocols or proto_name.lower() in selected_protocols:
+                protocol_counts[proto_name] += 1
+                top_talkers[ip_src] += 1
+                print(f"IP {ip_src} -> {packet[IP].dst} | Protocol: {proto_name} | Length: {len(packet)}")
+
+# start sniffing in a separate thread
+def start_sniffer(selected_protocols, bpf_filter):
+    global running
+    sniff(prn=lambda pkt: packet_callback(pkt, selected_protocols),
+          store=False,
+          filter=bpf_filter,
+          stop_filter=lambda x: not running)
+            
 def main():
     print("Starting packet sniffer... Ctrl+C to stop.")
-    
+    global running
     # ask user for protocols to monitor
     user_input = input("Enter protocols to monitor (tcp, udp, icmp, all): ").lower()
     selected_protocols = [p.strip() for p in user_input.split(",")]
@@ -30,10 +50,46 @@ def main():
     if "all" not in selected_protocols:
         bpf_filter = " or ".join(selected_protocols)
         
-    sniff(prn=lambda pkt: packet_callback(pkt, selected_protocols),
-          store=False,
-          filter=bpf_filter)
+    # start sniffer thread
+    sniff_thread = threading.Thread(target=start_sniffer, args=(selected_protocols, bpf_filter))
+    sniff_thread.start()
+    
+    # GUI plot in main thread
+    plt.ion()
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10,8))
+    
+    def signal_handler(sig, frame):
+        global running
+        print("Stopping...")
+        running = False
+        sniff_thread.join()
+        plt.close(fig)
+        exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    
+    
+    while True:
+        with lock:
+            ax1.clear()
+            ax2.clear()
 
+            # protocol counts bar chart
+            ax1.bar(protocol_counts.keys(), protocol_counts.values(), color=['blue','red','green'])
+            ax1.set_title("Packet Counts by Protocol")
+            ax1.set_ylabel("Count")
+
+            # top talkers bar chart
+            sorted_talkers = sorted(top_talkers.items(), key=lambda x: x[1], reverse=True)[:5]
+            ips = [ip for ip, count in sorted_talkers]
+            counts = [count for ip, count in sorted_talkers]
+            ax2.bar(ips, counts, color='purple')
+            ax2.set_title("Top 5 Source IPs")
+            ax2.set_ylabel("Packet Count")
+            ax2.set_xticks(range(len(ips)))
+            ax2.set_xticklabels(ips, rotation=45)
+        plt.pause(1)
+    
 if __name__ == "__main__":
     main()
 
