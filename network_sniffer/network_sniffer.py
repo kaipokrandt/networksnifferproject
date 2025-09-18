@@ -13,7 +13,7 @@ def packet_callback(packet):
         length = len(packet)
         
         proto_name = {1: "ICMP", 6: "TCP", 17: "UDP"}.get(proto, str(proto))
-        print(f"IP {ip_src} -> {ip_dst} | Proto: {proto_name} | Length: {length}")
+        print(f"IP {ip_src} -> {ip_dst} | Protocol: {proto_name} | Length: {length}")
         
 def main():
     print("Starting packet sniffer... Ctrl+C to stop.")
